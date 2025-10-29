@@ -64,6 +64,11 @@
         background: #0f6fc2;
       }
 
+      button:disabled {
+        background: #7fb3e6;
+        cursor: not-allowed;
+      }
+
       pre {
         margin-top: 20px;
         max-width: 350px;
@@ -84,13 +89,14 @@
     <form id="disconnectForm">
       <label for="userName">Nome de Usuário:</label>
       <input type="text" id="userName" name="userName" required disabled />
-      <button type="submit">Desconectar</button>
+      <button type="submit" id="disconnectButton">Desconectar</button>
     </form>
     <pre id="response"></pre>
 
     <script>
       const form = document.getElementById("disconnectForm"),
         inputUserName = document.getElementById("userName"),
+        disconnectButton = document.getElementById("disconnectButton"),
         responseContainer = document.getElementById("response"),
         queryString = window.location.search,
         urlParams = new URLSearchParams(queryString);
@@ -102,6 +108,8 @@
         event.preventDefault();
         const formData = new FormData(form);
         const userName = formData.get("userName") || inputUserName.value;
+        disconnectButton.disabled = true;
+        disconnectButton.textContent = "Desconectando...";
 
         const response = await fetch("/disconnect", {
           method: "POST",
@@ -114,6 +122,8 @@
         const responseData = await response.json();
         responseContainer.textContent = JSON.stringify(responseData, null, 2);
         responseContainer.style.display = "block";
+        disconnectButton.disabled = false;
+        disconnectButton.textContent = "Desconectar";
 
         setTimeout(() => {
           responseContainer.style.display = "none";
