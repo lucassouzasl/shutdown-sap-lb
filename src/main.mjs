@@ -1,5 +1,7 @@
+import fs from "fs";
 import http from "http";
-import { exec, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
+import { parseJson } from "./utils.mjs";
 
 const METHODS = {
   POST: "POST",
@@ -9,54 +11,76 @@ const METHODS = {
 const PATHS = {
   DISCONNECT: "/disconnect",
   STATUS: "/status",
+  PAGE: "/",
 };
 
 const psScriptPath = "C:\\temp\\test.ps1";
+const htmlHomePage = fs.readFileSync("./src/index.html", "utf-8");
 
 const server = http.createServer((req, res) => {
   const method = req.method;
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (method === METHODS.POST && url.pathname === PATHS.DISCONNECT) {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk.toString();
-    });
+  try {
+    if (method === METHODS.POST && url.pathname === PATHS.DISCONNECT) {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk.toString();
+      });
 
-    req.on("end", () => {
-      const { userName } = JSON.parse(body);
+      req.on("end", () => {
+        const { userName } = JSON.parse(body);
 
-      const result = spawnSync("powershell.exe", [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        psScriptPath,
-        "-userName",
-        userName,
-      ]);
+        const result = spawnSync("powershell.exe", [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          psScriptPath,
+          "-userName",
+          userName,
+        ]);
 
-      if (result.error) {
-        res.writeHead(500, { "Content-Type": "application/json" });
+        if (result.error || result.status !== 0 || result.stderr.length > 0) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              message: "Error executing script",
+              error:
+                result.error?.message ||
+                parseJson(result.stderr.toString()) ||
+                "Unknown error",
+            })
+          );
+          return;
+        }
+        console.info(`Script exited with code: ${result.status}`);
+        console.info(`Script stderr: ${result.stderr.toString()}`);
+        console.info(`Script output: ${result.stdout.toString()}`);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
-            message: "Error executing script",
-            error: result.error.message,
+            message: `Usuário ${userName} desconectado.`,
+            output: result.stdout.toString(),
           })
         );
-        return;
-      }
+      });
+      return;
+    }
 
-      console.info(`Script output: ${result.stdout.toString()}`);
+    if (method === METHODS.GET && url.pathname === PATHS.PAGE) {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(htmlHomePage);
+      return;
+    }
 
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ message: `User ${userName} disconnected.` }));
-    });
-    return;
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ message: "Not Found" }));
+  } catch (error) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ message: "Internal Server Error", error }));
   }
-
-  res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ message: "Not Found" }));
 });
 
 const PORT = 3000;
